@@ -30,6 +30,7 @@
  */
 
 #include <libcfs/libcfs.h>
+#include "libcfs_trace.h"
 
 unsigned long cfs_fail_loc = 0;
 unsigned int cfs_fail_val = 0;
@@ -119,18 +120,64 @@ int __cfs_fail_check_set(__u32 id, __u32 value, int set)
 }
 EXPORT_SYMBOL(__cfs_fail_check_set);
 
+/*
+ * The idea here is to synchronise two threads to force a race. The
+ * first thread that calls this with a matching fail_loc is put to
+ * sleep. The next thread that calls with the same fail_loc wakes up
+ * the first and continues.
+ */
+void cfs_race(u32 id)
+{
+	if (CFS_FAIL_PRECHECK(id)) {
+		if (unlikely(__cfs_fail_check_set(id, 0, CFS_FAIL_LOC_NOSET))) {
+			int rc;
+
+			cfs_race_state = 0;
+			trace_cerror_fail_race_sleeping(id);
+			rc = wait_event_interruptible(cfs_race_waitq,
+						      cfs_race_state != 0);
+			trace_cerror_fail_race_awake(id, rc);
+		} else {
+			trace_cerror_fail_race_awaking(id);
+			cfs_race_state = 1;
+			wake_up(&cfs_race_waitq);
+		}
+	}
+}
+EXPORT_SYMBOL(cfs_race);
+
+int cfs_fail_check_set(u32 id, u32 value, int set, int quiet)
+{
+	bool precheck = CFS_FAIL_PRECHECK(id);
+	int ret = 0;
+
+	if (unlikely(precheck)) {
+		ret = __cfs_fail_check_set(id, value, set);
+		if (!ret)
+			goto not_set;
+
+		trace_info_fail_loc(id, value);
+		if (!quiet && __ratelimit(&libcfs_trace_rs)) {
+			pr_info("Libcfs: *** cfs_fail_loc=%x, val=%u***\n",
+				id, value);
+		}
+	}
+not_set:
+	return ret;
+}
+EXPORT_SYMBOL(cfs_fail_check_set);
+
 int __cfs_fail_timeout_set(__u32 id, __u32 value, int ms, int set)
 {
 	int ret = 0;
 
 	ret = __cfs_fail_check_set(id, value, set);
 	if (ret && likely(ms > 0)) {
-		CERROR("cfs_fail_timeout id %x sleeping for %dms\n",
-		       id, ms);
+		trace_cerror_timeout_sleep(id, ms);
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout(cfs_time_seconds(ms) / 1000);
 		set_current_state(TASK_RUNNING);
-		CERROR("cfs_fail_timeout id %x awake\n", id);
+		trace_cerror_timeout_awake(id);
 	}
 	return ret;
 }

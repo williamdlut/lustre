@@ -330,6 +330,21 @@ kernel_param_ops, [
 ]) # LIBCFS_KERNEL_PARAM_OPS
 
 #
+# Kernel version 3.12 created kbasename
+#
+AC_DEFUN([LIBCFS_KBASENAME],[
+LB_CHECK_COMPILE([does function 'kbasename' exist],
+kbasename, [
+	#include <linux/string.h>
+],[
+	const char *tmp = kbasename(NULL);
+],[
+	AC_DEFINE(HAVE_KBASENAME, 1,
+		[kbasename is available])
+])
+]) # LIBCFS_KBASENAME
+
+#
 # Kernel version 3.12 introduced ktime_add
 #
 AC_DEFUN([LIBCFS_KTIME_ADD],[
@@ -381,6 +396,89 @@ shrinker_count_objects, [
 		[shrinker has count_objects member])
 ])
 ]) # LIBCFS_SHRINKER_COUNT
+
+#
+# 3.12 kernel introduced both ratelimiting and conditional
+# tracepoints which is need to replicate the current lctl
+# debug functionality.
+#
+AC_DEFUN([LIBCFS_TRACEPOINT],[
+tmp_flags="$EXTRA_KCFLAGS"
+EXTRA_KCFLAGS="-I\$(src)"
+AC_MSG_CHECKING([whether kernel can support conditional tracepoints])
+LB_LINUX_TRY_COMPILE_HEADER([
+	#include <linux/kernel.h>
+	#include <linux/module.h>
+
+	#define CREATE_TRACE_POINTS
+	#include "conftest.h"
+],[
+	struct ratelimit_state *rs = NULL;
+
+	trace_libcfs_autoconf_event_one(rs);
+	trace_libcfs_autoconf_event_two(rs);
+],[
+	AC_MSG_RESULT(yes)
+	AC_DEFINE(CONFIG_LUSTRE_TRACEPOINT, 1,
+		[proper tracepoint support is available])
+],[
+	AC_MSG_RESULT(no)
+],[
+	#if !defined(_CONFTEST_H) || defined(TRACE_HEADER_MULTI_READ)
+	#define _CONFTEST_H
+
+	#undef TRACE_SYSTEM
+	#define TRACE_SYSTEM libcfs
+	#include <linux/ratelimit.h>
+	#include <linux/tracepoint.h>
+
+	DECLARE_EVENT_CLASS(libcfs_autoconf_event_class,
+		TP_PROTO(struct ratelimit_state *rs),
+		TP_ARGS(rs),
+		TP_STRUCT__entry(
+			__field(struct ratelimit_state *, rs)
+		),
+		TP_fast_assign(
+			__entry->rs = rs;
+		),
+		TP_printk("rs = %p", __entry->rs)
+	);
+
+	#define DEFINE_AUTOCONF_EVENT_CONDITION(name) \
+		DEFINE_EVENT_CONDITION(libcfs_autoconf_event_class, name, \
+			TP_PROTO(struct ratelimit_state *rs), \
+			TP_ARGS(rs), \
+			TP_CONDITION(__ratelimit(rs)))
+		DEFINE_AUTOCONF_EVENT_CONDITION(libcfs_autoconf_event_one);
+		DEFINE_AUTOCONF_EVENT_CONDITION(libcfs_autoconf_event_two);
+
+	#endif /* _CONFTEST_H */
+
+	#undef  TRACE_INCLUDE_PATH
+	#define TRACE_INCLUDE_PATH .
+	#define TRACE_INCLUDE_FILE conftest
+	#include <trace/define_trace.h>
+])
+EXTRA_KCFLAGS="$tmp_flags"
+]) # LIBCFS_TRACEPOINT
+
+#
+# Kernel version 3.13 added ratelimit_state_init.
+# RHEL6 is missing this
+#
+AC_DEFUN([LIBCFS_RATELIMIT_STATE_INIT],[
+LB_CHECK_COMPILE([does function 'ratelimit_state_init' exist],
+ratelimit_state_init, [
+	#include <linux/ratelimit.h>
+],[
+	struct ratelimit_state rs;
+
+	ratelimit_state_init(&rs, 0, 0);
+],[
+	AC_DEFINE(HAVE_RATELIMIT_STATE_INIT, 1,
+		[ratelimit_state_init is available])
+])
+]) # LIBCFS_RATELIMIT_STATE_INIT
 
 #
 # Kernel version 3.17 changed hlist_add_after to
@@ -606,6 +704,16 @@ LB_CHECK_LINUX_HEADER([asm/fpu/api.h], [
 ]) # LIBCFS_FPU_API
 
 #
+# Kernel version 4.2 commit af658dca221207174fc0a7bcdcd4cff7c589fdd8
+# renamed ftrace_event.h to trace_events.h
+#
+AC_DEFUN([LIBCFS_TRACE_EVENTS], [
+LB_CHECK_LINUX_HEADER([linux/trace_events.h], [
+	AC_DEFINE(HAVE_TRACE_EVENTS_HEADER, 1,
+		[trace_events.h is present])])
+]) # LIBCFS_TRACE_EVENTS
+
+#
 # Kernel version 4.5-rc1 commit d12481bc58fba89427565f8592e88446ec084a24
 # added crypto hash helpers
 #
@@ -763,10 +871,14 @@ LIBCFS_ENABLE_CRC32C_ACCEL
 # 3.11
 LIBCFS_KTIME_GET_TS64
 # 3.12
+LIBCFS_KBASENAME
 LIBCFS_KERNEL_PARAM_OPS
 LIBCFS_KTIME_ADD
 LIBCFS_KTIME_AFTER
 LIBCFS_SHRINKER_COUNT
+LIBCFS_TRACEPOINT
+# 3.13
+LIBCFS_RATELIMIT_STATE_INIT
 # 3.17
 LIBCFS_HLIST_ADD_AFTER
 LIBCFS_TIMESPEC64
@@ -784,6 +896,7 @@ LIBCFS_KERNEL_PARAM_LOCK
 # 4.2
 LIBCFS_HAVE_TOPOLOGY_SIBLING_CPUMASK
 LIBCFS_FPU_API
+LIBCFS_TRACE_EVENTS
 # 4.5
 LIBCFS_CRYPTO_HASH_HELPERS
 # 4.6

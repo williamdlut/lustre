@@ -38,6 +38,7 @@
 #include <asm/i387.h>
 #endif
 #include <libcfs/libcfs.h>
+#include "../libcfs_trace.h"
 
 #define CHKSUM_BLOCK_SIZE	1
 #define CHKSUM_DIGEST_SIZE	4
@@ -183,7 +184,7 @@ static struct shash_alg alg = {
 int cfs_crypto_crc32_pclmul_register(void)
 {
 	if (!boot_cpu_has(X86_FEATURE_PCLMULQDQ)) {
-		CDEBUG(D_INFO, "PCLMULQDQ-NI instructions are not detected.\n");
+		trace_info_crypto_crc32_pclmul_missing();
 		return -ENODEV;
 	}
 	return crypto_register_shash(&alg);

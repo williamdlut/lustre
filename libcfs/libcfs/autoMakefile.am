@@ -59,6 +59,6 @@ endif # LINUX
 endif # MODULES
 
 MOSTLYCLEANFILES := @MOSTLYCLEANFILES@ linux-*.c linux/*.o libcfs
-EXTRA_DIST := $(libcfs-all-objs:%.o=%.c) tracefile.h prng.c \
-	      workitem.c fail.c libcfs_cpu.c \
-	      heap.c libcfs_mem.c libcfs_lock.c
+EXTRA_DIST := $(libcfs-all-objs:%.o=%.c) libcfs_trace.h libcfs_trace.c \
+	      workitem.c fail.c tracefile.h libcfs_cpu.c \
+	      libcfs_mem.c libcfs_lock.c heap.c prng.c

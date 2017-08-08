@@ -38,6 +38,7 @@
 #ifndef __LIBCFS_DEBUG_H__
 #define __LIBCFS_DEBUG_H__
 
+#include <linux/ratelimit.h>
 #include <uapi/linux/lnet/libcfs_debug.h>
 
 /*
@@ -102,6 +103,11 @@ do {                                                        \
                .msg_line   = __LINE__,                      \
                .msg_cdls   = (cdls)         };              \
         dataname.msg_mask   = (mask);
+
+#define CFS_TRACE_CONSOLE_BUFFER_SIZE	1024
+
+int libcfs_debug_trace_init(struct module *module, int sub_system,
+			    struct ratelimit_state *rs);
 
 #ifdef CDEBUG_ENABLED
 

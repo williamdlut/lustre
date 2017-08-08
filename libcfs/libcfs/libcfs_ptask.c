@@ -11,6 +11,7 @@
 #define DEBUG_SUBSYSTEM S_UNDEFINED
 
 #include <libcfs/libcfs.h>
+#include "libcfs_trace.h"
 #include <libcfs/libcfs_ptask.h>
 
 /**
@@ -375,9 +376,8 @@ static int cfs_ptengine_padata_init(struct cfs_ptask_engine *engine,
 		cpumap_print_to_pagebuf(true, cb_mask_buff, all_mask);
 		cb_mask_buff[PAGE_SIZE - 1] = '\0';
 
-		CDEBUG(D_INFO, "%s weight=%u plist='%s' cblist='%s'\n",
-			name, cpumask_weight(par_mask),
-			pa_mask_buff, cb_mask_buff);
+		trace_info_ptask_setup(name, cpumask_weight(par_mask),
+				       pa_mask_buff, cb_mask_buff);
 
 		free_page((unsigned long)cb_mask_buff);
 		free_page((unsigned long)pa_mask_buff);

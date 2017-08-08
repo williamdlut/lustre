@@ -35,13 +35,21 @@
  *
  */
 
-# define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <linux/kthread.h>
+#ifdef HAVE_TRACE_EVENTS_HEADER
+# include <linux/trace_events.h>
+#else
+# include <linux/ftrace_event.h>
+#endif /* HAVE_TRACE_EVENTS_HEADER */
 #include <libcfs/libcfs.h>
+#include "libcfs_trace.h"
 #include "tracefile.h"
 
 static char debug_file_name[1024];
+
+struct ratelimit_state libcfs_trace_rs;
 
 unsigned int libcfs_subsystem_debug = ~0;
 module_param(libcfs_subsystem_debug, int, 0644);
@@ -356,9 +364,7 @@ libcfs_debug_str2mask(int *mask, const char *str, int is_subsys)
             matched == n) {
                 /* don't print warning for lctl set_param debug=0 or -1 */
                 if (m != 0 && m != -1)
-                        CWARN("You are trying to use a numerical value for the "
-                              "mask - this will be deprecated in a future "
-                              "release.\n");
+			trace_cwarn_unsupported_mask();
                 *mask = m;
                 return 0;
         }
@@ -429,6 +435,49 @@ void libcfs_debug_dumplog(void)
 }
 EXPORT_SYMBOL(libcfs_debug_dumplog);
 
+int libcfs_debug_trace_init(struct module *module, int sub_system,
+			    struct ratelimit_state *rs)
+{
+#ifdef CONFIG_LUSTRE_TRACEPOINT
+	struct tracepoint * const *events = module->tracepoints_ptrs;
+	char subsys[64], buf[512], *debug_mask, *masks;
+
+	if (!(libcfs_subsystem_debug & sub_system))
+		return -ENODEV;
+
+	libcfs_debug_mask2str(subsys, sizeof(subsys), sub_system, 1);
+	if (!strlen(subsys))
+		return -EINVAL;
+
+	libcfs_debug_mask2str(buf, sizeof(buf), libcfs_debug, 0);
+	masks = buf;
+
+	while ((debug_mask = strsep(&masks, " ")) && *debug_mask) {
+		char event[128];
+		int i;
+
+		/*
+		 * trace and malloc can be done with standard trace
+		 */
+		if (!strcmp(debug_mask, "trace") ||
+		    !strcmp(debug_mask, "malloc"))
+			continue;
+
+		snprintf(event, sizeof(event), "%s_%s", subsys, debug_mask);
+
+		for (i = 0; i < module->num_tracepoints; i++) {
+			if (!strncmp(events[i]->name, event, strlen(event)))
+				trace_set_clr_event(subsys, events[i]->name, 1);
+		}
+	}
+#endif /* CONFIG_LUSTRE_TRACEPOINT */
+
+	/* TODO map console print limits to ratelimit */
+	ratelimit_state_init(rs, libcfs_console_max_delay, 10);
+	return 0;
+}
+EXPORT_SYMBOL(libcfs_debug_trace_init);
+
 int libcfs_debug_init(unsigned long bufsize)
 {
 	int    rc = 0;
@@ -465,6 +514,8 @@ int libcfs_debug_init(unsigned long bufsize)
 	libcfs_register_panic_notifier();
 	kernel_param_lock(THIS_MODULE);
 	libcfs_debug_mb = cfs_trace_get_debug_mb();
+	rc = libcfs_debug_trace_init(THIS_MODULE, S_LIBCFS,
+				     &libcfs_trace_rs);
 	kernel_param_unlock(THIS_MODULE);
 	return rc;
 }
@@ -484,7 +535,7 @@ int libcfs_debug_clear_buffer(void)
         return 0;
 }
 
-/* Debug markers, although printed by S_LNET
+/* Debug markers, although printed by S_LIBCFS
  * should not be be marked as such. */
 #undef DEBUG_SUBSYSTEM
 #define DEBUG_SUBSYSTEM S_UNDEFINED
@@ -497,7 +548,7 @@ int libcfs_debug_mark_buffer(const char *text)
         return 0;
 }
 #undef DEBUG_SUBSYSTEM
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 long libcfs_log_return(struct libcfs_debug_msg_data *msgdata, long rc)
 {

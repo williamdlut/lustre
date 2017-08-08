@@ -30,7 +30,7 @@
  * Lustre is a trademark of Sun Microsystems, Inc.
  */
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs_struct.h>

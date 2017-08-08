@@ -34,7 +34,7 @@
  * Author: Phil Schwan <phil@clusterfs.com>
  */
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <assert.h>
 #include <errno.h>

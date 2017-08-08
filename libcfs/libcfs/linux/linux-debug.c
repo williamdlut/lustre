@@ -56,10 +56,10 @@
 #include <linux/miscdevice.h>
 #include <linux/version.h>
 
-# define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <libcfs/libcfs.h>
-
+#include "../libcfs_trace.h"
 #include "tracefile.h"
 
 #include <linux/kallsyms.h>
@@ -89,14 +89,10 @@ void libcfs_run_debug_log_upcall(char *file)
         argv[2] = NULL;
 
         rc = call_usermodehelper(argv[0], argv, envp, 1);
-        if (rc < 0 && rc != -ENOENT) {
-                CERROR("Error %d invoking LNET debug log upcall %s %s; "
-                       "check /proc/sys/lnet/debug_log_upcall\n",
-                       rc, argv[0], argv[1]);
-        } else {
-                CDEBUG(D_HA, "Invoked LNET debug log upcall %s %s\n",
-                       argv[0], argv[1]);
-        }
+	if (rc < 0 && rc != -ENOENT)
+		trace_cerror_log_upcall(rc, argv[0], argv[1]);
+	else
+		trace_ha(argv[0], argv[1]);
 
         EXIT;
 }
@@ -205,7 +201,7 @@ static void libcfs_call_trace(struct task_struct *tsk)
 	if (tsk == current)
 		dump_stack();
 	else
-		CWARN("can't show stack: kernel doesn't export show_task\n");
+		trace_cwarn_no_show_task();
 }
 
 #endif /* CONFIG_X86 */
@@ -215,12 +211,6 @@ void libcfs_debug_dumpstack(struct task_struct *tsk)
 	libcfs_call_trace(tsk ?: current);
 }
 EXPORT_SYMBOL(libcfs_debug_dumpstack);
-
-struct task_struct *libcfs_current(void)
-{
-        CWARN("current task struct is %p\n", current);
-        return current;
-}
 
 static int panic_notifier(struct notifier_block *self, unsigned long unused1,
                          void *unused2)

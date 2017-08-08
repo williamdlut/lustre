@@ -30,9 +30,10 @@
  * Author: liang@whamcloud.com
  */
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <libcfs/libcfs.h>
+#include "libcfs_trace.h"
 
 /** destroy cpu-partition lock, see libcfs_private.h for more detail */
 void
@@ -73,10 +74,7 @@ cfs_percpt_lock_create(struct cfs_cpt_table *cptab,
 		return NULL;
 	}
 
-	if (keys == NULL) {
-		CWARN("Cannot setup class key for percpt lock, you may see "
-		      "recursive locking warnings which are actually fake.\n");
-	}
+	trace_cwarn_lock_no_key(keys);
 
 	cfs_percpt_for_each(lock, i, pcl->pcl_locks) {
 		spin_lock_init(lock);

@@ -33,7 +33,7 @@
  * Author: liang@whamcloud.com
  */
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <libcfs/libcfs.h>
 
@@ -52,7 +52,7 @@ struct cfs_cpt_table *cfs_cpt_table_alloc(int ncpt)
 	struct cfs_cpt_table *cptab;
 
 	if (ncpt != 1) {
-		CERROR("Can't support cpu partition number %d\n", ncpt);
+		trace_cerror_cpu_bad_ump_setup(ncpt);
 		return NULL;
 	}
 

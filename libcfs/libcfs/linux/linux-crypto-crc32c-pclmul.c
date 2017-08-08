@@ -36,6 +36,7 @@
 #include <asm/i387.h>
 #endif
 #include <libcfs/libcfs.h>
+#include "../libcfs_trace.h"
 
 #define CHKSUM_BLOCK_SIZE	1
 #define CHKSUM_DIGEST_SIZE	4
@@ -147,7 +148,7 @@ static struct shash_alg alg = {
 int cfs_crypto_crc32c_pclmul_register(void)
 {
 	if (!boot_cpu_has(X86_FEATURE_XMM4_2)) {
-		CDEBUG(D_INFO, "CRC32 instruction is not detected.\n");
+		trace_info_crypto_crc32c_pclmul_missing();
 		return -ENODEV;
 	}
 	return crypto_register_shash(&alg);

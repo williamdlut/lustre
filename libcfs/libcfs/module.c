@@ -48,11 +48,12 @@
 #include <linux/debugfs.h>
 #include <asm/div64.h>
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <libcfs/libcfs.h>
 #include <libcfs/libcfs_crypto.h>
 #include <lnet/lib-lnet.h>
+#include "libcfs_trace.h"
 #include "tracefile.h"
 
 static struct dentry *lnet_debugfs_root;
@@ -100,8 +101,7 @@ int libcfs_ioctl(unsigned long cmd, void __user *uparam)
 	/* 'cmd' and permissions get checked in our arch-specific caller */
 	err = libcfs_ioctl_getdata(&hdr, uparam);
 	if (err != 0) {
-		CDEBUG_LIMIT(D_ERROR,
-			     "libcfs ioctl: data header error %d\n", err);
+		trace_cerror_ioctl_invalid_header(err);
 		RETURN(err);
 	}
 
@@ -116,7 +116,7 @@ int libcfs_ioctl(unsigned long cmd, void __user *uparam)
 			GOTO(out, err);
 	}
 
-	CDEBUG(D_IOCTL, "libcfs ioctl cmd %lu\n", cmd);
+	trace_ioctl(cmd);
 	switch (cmd) {
 	case IOC_LIBCFS_CLEAR_DEBUG:
 		libcfs_debug_clear_buffer();
@@ -613,7 +613,7 @@ static int __init libcfs_init(void)
 
 	rc = libcfs_debug_init(5 * 1024 * 1024);
 	if (rc < 0) {
-		printk(KERN_ERR "LustreError: libcfs_debug_init: %d\n", rc);
+		pr_err("LustreError: libcfs_debug_init: %d\n", rc);
 		return (rc);
 	}
 
@@ -623,13 +623,13 @@ static int __init libcfs_init(void)
 
 	rc = misc_register(&libcfs_dev);
 	if (rc) {
-		CERROR("misc_register: error %d\n", rc);
+		trace_cerror_startup_misc_dev(rc);
 		goto cleanup_cpu;
 	}
 
 	rc = cfs_wi_startup();
 	if (rc) {
-		CERROR("initialize workitem: error %d\n", rc);
+		trace_cerror_startup_wi(rc);
 		goto cleanup_deregister;
 	}
 
@@ -638,19 +638,19 @@ static int __init libcfs_init(void)
 	rc = cfs_wi_sched_create("cfs_rh", cfs_cpt_table, CFS_CPT_ANY,
 				 rc, &cfs_sched_rehash);
 	if (rc != 0) {
-		CERROR("Startup workitem scheduler: error: %d\n", rc);
+		trace_cerror_startup_wi_sched(rc);
 		goto cleanup_deregister;
 	}
 
 	rc = cfs_crypto_register();
 	if (rc) {
-		CERROR("cfs_crypto_regster: error %d\n", rc);
+		trace_cerror_startup_crypto(rc);
 		goto cleanup_wi;
 	}
 
 	lnet_insert_debugfs(lnet_table, lnet_debugfs_symlinks);
 
-	CDEBUG (D_OTHER, "portals setup OK\n");
+	trace_other("libcfs setup OK\n");
 	return 0;
 cleanup_wi:
 	cfs_wi_shutdown();
@@ -669,7 +669,7 @@ static void __exit libcfs_exit(void)
 
 	lnet_remove_debugfs();
 
-	CDEBUG(D_MALLOC, "before Portals cleanup: kmem %d\n",
+	CDEBUG(D_MALLOC, "before libcfs cleanup: kmem %d\n",
 	       atomic_read(&libcfs_kmemory));
 
 	if (cfs_sched_rehash != NULL) {
@@ -684,14 +684,17 @@ static void __exit libcfs_exit(void)
 
 	cfs_cpu_fini();
 
+	/*
+	 * The kernel provides tracepoints for kmem so no need to make
+	 * a special trace point
+	 */
 	if (atomic_read(&libcfs_kmemory) != 0)
-		CERROR("Portals memory leaked: %d bytes\n",
+		CERROR("libcfs memory leaked: %d bytes\n",
 		       atomic_read(&libcfs_kmemory));
 
 	rc = libcfs_debug_cleanup();
 	if (rc)
-		printk(KERN_ERR "LustreError: libcfs_debug_cleanup: %d\n",
-		       rc);
+		pr_err("LustreError: libcfs_debug_cleanup: %d\n", rc);
 }
 
 MODULE_AUTHOR("OpenSFS, Inc. <http://www.lustre.org/>");

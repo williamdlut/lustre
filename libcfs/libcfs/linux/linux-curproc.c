@@ -42,7 +42,7 @@
 #include <linux/compat.h>
 #include <linux/thread_info.h>
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <libcfs/libcfs.h>
 

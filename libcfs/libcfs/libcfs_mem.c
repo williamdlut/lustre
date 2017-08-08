@@ -31,7 +31,7 @@
  * Author: liang@whamcloud.com
  */
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <libcfs/libcfs.h>
 

@@ -153,4 +153,13 @@ static inline int kstrtoul(const char *s, unsigned int base, unsigned long *res)
 }
 #endif /* !HAVE_KSTRTOUL */
 
+#ifndef HAVE_KBASENAME
+static inline const char *kbasename(const char *path)
+{
+	const char *tail = strrchr(path, '/');
+
+	return tail ? tail + 1 : path;
+}
+#endif /* !HAVE_KBASENAME */
+
 #endif

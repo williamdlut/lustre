@@ -32,11 +32,12 @@
  * Author: liang@whamcloud.com
  */
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <linux/cpu.h>
 #include <linux/sched.h>
 #include <libcfs/libcfs.h>
+#include "../libcfs_trace.h"
 
 #ifdef CONFIG_SMP
 
@@ -433,23 +434,21 @@ int cfs_cpt_set_cpu(struct cfs_cpt_table *cptab, int cpt, int cpu)
 	LASSERT(cpt >= 0 && cpt < cptab->ctb_nparts);
 
 	if (cpu < 0 || cpu >= nr_cpu_ids || !cpu_online(cpu)) {
-		CDEBUG(D_INFO, "CPU %d is invalid or it's offline\n", cpu);
+		trace_info_cpu_offline(cpu);
 		return 0;
 	}
 
 	if (cptab->ctb_cpu2cpt[cpu] != -1) {
-		CDEBUG(D_INFO, "CPU %d is already in partition %d\n",
-		       cpu, cptab->ctb_cpu2cpt[cpu]);
+		trace_info_cpu_extra_mapping(cpu, cptab->ctb_cpu2cpt[cpu]);
 		return 0;
 	}
 
 	if (cpumask_test_cpu(cpu, cptab->ctb_cpumask)) {
-		CDEBUG(D_INFO, "CPU %d is already in cpumask\n", cpu);
+		trace_info_cpu_already_in_cpumask(cpu);
 		return 0;
 	}
 	if (cpumask_test_cpu(cpu, cptab->ctb_parts[cpt].cpt_cpumask)) {
-		CDEBUG(D_INFO, "CPU %d is already in partition %d cpumask\n",
-		       cpu, cptab->ctb_cpu2cpt[cpu]);
+		trace_info_cpu_extra_mapping(cpu, cptab->ctb_cpu2cpt[cpu]);
 		return 0;
 	}
 
@@ -465,7 +464,7 @@ void cfs_cpt_unset_cpu(struct cfs_cpt_table *cptab, int cpt, int cpu)
 	LASSERT(cpt == CFS_CPT_ANY || (cpt >= 0 && cpt < cptab->ctb_nparts));
 
 	if (cpu < 0 || cpu >= nr_cpu_ids) {
-		CDEBUG(D_INFO, "Invalid CPU id %d\n", cpu);
+		trace_info_cpu_invalid_id(cpu);
 		return;
 	}
 
@@ -473,13 +472,12 @@ void cfs_cpt_unset_cpu(struct cfs_cpt_table *cptab, int cpt, int cpu)
 		/* caller doesn't know the partition ID */
 		cpt = cptab->ctb_cpu2cpt[cpu];
 		if (cpt < 0) { /* not set in this CPT-table */
-			CDEBUG(D_INFO, "Try to unset cpu %d which is "
-				       "not in CPT-table %p\n", cpt, cptab);
+			trace_info_cpu_unavailable(cpt, cptab);
 			return;
 		}
 
 	} else if (cpt != cptab->ctb_cpu2cpt[cpu]) {
-		CDEBUG(D_INFO, "CPU %d is not in CPU partition %d\n", cpu, cpt);
+		trace_info_cpu_not_mapped(cpu, cpt);
 		return;
 	}
 
@@ -498,8 +496,7 @@ int cfs_cpt_set_cpumask(struct cfs_cpt_table *cptab, int cpt,
 
 	if (cpumask_weight(mask) == 0 ||
 	    cpumask_any_and(mask, cpu_online_mask) >= nr_cpu_ids) {
-		CDEBUG(D_INFO, "No online CPU is found in the CPU mask "
-			       "for CPU partition %d\n", cpt);
+		trace_info_cpu_all_offline(cpt);
 		return 0;
 	}
 
@@ -530,8 +527,7 @@ int cfs_cpt_set_node(struct cfs_cpt_table *cptab, int cpt, int node)
 	int cpu;
 
 	if (node < 0 || node >= nr_node_ids) {
-		CDEBUG(D_INFO,
-		       "Invalid NUMA id %d for CPU partition %d\n", node, cpt);
+		trace_info_cpu_invalid_numa(node, cpt);
 		return 0;
 	}
 
@@ -552,8 +548,7 @@ void cfs_cpt_unset_node(struct cfs_cpt_table *cptab, int cpt, int node)
 	int cpu;
 
 	if (node < 0 || node >= nr_node_ids) {
-		CDEBUG(D_INFO,
-		       "Invalid NUMA id %d for CPU partition %d\n", node, cpt);
+		trace_info_cpu_invalid_numa(node, cpt);
 		return;
 	}
 
@@ -673,10 +668,7 @@ int cfs_cpt_bind(struct cfs_cpt_table *cptab, int cpt)
 	}
 
 	if (!cpumask_intersects(cpumask, cpu_online_mask)) {
-		CDEBUG(D_INFO, "No online CPU found in CPU partition %d, did "
-			"someone do CPU hotplug on system? You might need to "
-			"reload Lustre modules to keep system working well.\n",
-			cpt);
+		trace_cerror_cpus_missing(cpt);
 		return -ENODEV;
 	}
 
@@ -810,23 +802,19 @@ static struct cfs_cpt_table *cfs_cpt_table_create(int ncpt)
 	if (ncpt <= 0)
 		ncpt = num;
 
-	if (ncpt > num_online_cpus() || ncpt > 4 * num) {
-		CWARN("CPU partition number %d is larger than suggested "
-		      "value (%d), your system may have performance "
-		      "issue or run out of memory while under pressure\n",
-		      ncpt, num);
-	}
+	if (ncpt > num_online_cpus() || ncpt > 4 * num)
+		trace_cwarn_invalid_cpt_number(ncpt, num);
 
 	cptab = cfs_cpt_table_alloc(ncpt);
 	if (cptab == NULL) {
-		CERROR("Failed to allocate CPU map(%d)\n", ncpt);
+		trace_cerror_cpu_allocate_map(ncpt);
 		rc = -ENOMEM;
 		goto failed;
 	}
 
 	LIBCFS_ALLOC(node_mask, cpumask_size());
 	if (node_mask == NULL) {
-		CERROR("Failed to allocate scratch cpumask\n");
+		trace_cerror_cpu_allocate_scratch();
 		rc = -ENOMEM;
 		goto failed;
 	}
@@ -859,9 +847,8 @@ static struct cfs_cpt_table *cfs_cpt_table_create(int ncpt)
 	return cptab;
 
 failed:
-	CERROR("Failed (rc=%d) to setup CPU partition table with %d "
-		"partitions, online HW NUMA nodes: %d, HW CPU cores: %d.\n",
-		rc, ncpt, num_online_nodes(), num_online_cpus());
+	trace_cerror_cpus_fail_state(ncpt, num_online_nodes(),
+				     num_online_cpus(), rc);
 
 	if (node_mask != NULL)
 		LIBCFS_FREE(node_mask, cpumask_size());
@@ -888,7 +875,7 @@ static struct cfs_cpt_table *cfs_cpt_table_create_pattern(const char *pattern)
 
 	pattern_dup = kstrdup(pattern, GFP_KERNEL);
 	if (pattern_dup == NULL) {
-		CERROR("Failed to duplicate pattern '%s'\n", pattern);
+		trace_cerror_cpus_fail_dup_pattern(pattern);
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -980,22 +967,21 @@ static struct cfs_cpt_table *cfs_cpt_table_create_pattern(const char *pattern)
 		}
 
 		if (cfs_cpt_weight(cptab, cpt) != 0) {
-			CERROR("Partition %d has already been set.\n", cpt);
+			trace_cerror_cpus_partition_set(cpt);
 			rc = -EPERM;
 			goto err_free_table;
 		}
 
 		str = cfs_trimwhite(str + n);
 		if (str != bracket) {
-			CERROR("Invalid pattern '%s'\n", str);
+			trace_cerror_cpus_invalid_pattern(str);
 			rc = -EINVAL;
 			goto err_free_table;
 		}
 
 		bracket = strchr(str, ']');
 		if (bracket == NULL) {
-			CERROR("Missing right bracket for partition "
-				"%d in '%s'\n", cpt, str);
+			trace_cerror_cpus_missing_bracket(cpt, str);
 			rc = -EINVAL;
 			goto err_free_table;
 		}
@@ -1003,7 +989,7 @@ static struct cfs_cpt_table *cfs_cpt_table_create_pattern(const char *pattern)
 		rc = cfs_expr_list_parse(str, (bracket - str) + 1, 0, high,
 					 &el);
 		if (rc) {
-			CERROR("Can't parse number range in '%s'\n", str);
+			trace_cerror_cpus_invalid_range(str);
 			rc = -ERANGE;
 			goto err_free_table;
 		}
@@ -1026,7 +1012,7 @@ static struct cfs_cpt_table *cfs_cpt_table_create_pattern(const char *pattern)
 		cfs_expr_list_free(el);
 
 		if (!cfs_cpt_online(cptab, cpt)) {
-			CERROR("No online CPU is found on partition %d\n", cpt);
+			trace_cerror_cpus_empty_partition(cpt);
 			rc = -ENODEV;
 			goto err_free_table;
 		}
@@ -1080,8 +1066,7 @@ static int cfs_cpu_notify(struct notifier_block *self, unsigned long action,
 	case CPU_ONLINE_FROZEN:
 	default:
 		if (action != CPU_DEAD && action != CPU_DEAD_FROZEN) {
-			CDEBUG(D_INFO, "CPU changed [cpu %u action %lx]\n",
-			       cpu, action);
+			trace_info_cpu_changed(cpu, action);
 			break;
 		}
 
@@ -1143,8 +1128,7 @@ int cfs_cpu_init(void)
 	if (*cpu_pattern != 0) {
 		cfs_cpt_table = cfs_cpt_table_create_pattern(cpu_pattern);
 		if (IS_ERR(cfs_cpt_table)) {
-			CERROR("Failed to create cptab from pattern '%s'\n",
-				cpu_pattern);
+			trace_cerror_cpus_fail_create_cptab(cpu_pattern);
 			ret = PTR_ERR(cfs_cpt_table);
 			goto failed;
 		}
@@ -1152,17 +1136,18 @@ int cfs_cpu_init(void)
 	} else {
 		cfs_cpt_table = cfs_cpt_table_create(cpu_npartitions);
 		if (IS_ERR(cfs_cpt_table)) {
-			CERROR("Failed to create cptab with npartitions %d\n",
-				cpu_npartitions);
+			trace_cerror_cpus_fail_create_ptable(cpu_npartitions);
 			ret = PTR_ERR(cfs_cpt_table);
 			goto failed;
 		}
 	}
 	put_online_cpus();
 
-	LCONSOLE(0, "HW NUMA nodes: %d, HW CPU cores: %d, npartitions: %d\n",
-		 num_online_nodes(), num_online_cpus(),
-		 cfs_cpt_number(cfs_cpt_table));
+	trace_console(num_online_nodes(), num_online_cpus(),
+		      cfs_cpt_number(cfs_cpt_table));
+	pr_info("Libcfs: HW NUMA nodes: %d, HW CPU cores: %d, npartitions: %d\n",
+		num_online_nodes(), num_online_cpus(),
+		cfs_cpt_number(cfs_cpt_table));
 	return 0;
 
 failed:

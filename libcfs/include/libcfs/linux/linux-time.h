@@ -39,14 +39,6 @@
 #ifndef __LIBCFS_LINUX_LINUX_TIME_H__
 #define __LIBCFS_LINUX_LINUX_TIME_H__
 
-#ifndef __LIBCFS_LIBCFS_H__
-#error Do not #include this file directly. #include <libcfs/libcfs.h> instead
-#endif
-
-#ifndef __KERNEL__
-#error This include is only for kernel use.
-#endif
-
 /* Portable time API */
 
 /*
@@ -85,6 +77,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/hrtimer.h>
 #include <linux/version.h>
 #include <linux/jiffies.h>
 #include <linux/types.h>

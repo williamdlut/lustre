@@ -30,9 +30,10 @@
  * Lustre is a trademark of Sun Microsystems, Inc.
  */
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <libcfs/libcfs.h>
+#include "../libcfs_trace.h"
 
 #define LNET_MINOR 240
 
@@ -90,7 +91,7 @@ int libcfs_ioctl_data_adjust(struct libcfs_ioctl_data *data)
 	ENTRY;
 
 	if (libcfs_ioctl_is_invalid(data)) {
-		CERROR("libcfs ioctl: parameter not correctly formatted\n");
+		trace_cerror_ioctl_invalid_parameter();
 		RETURN(-EINVAL);
 	}
 
@@ -116,19 +117,19 @@ int libcfs_ioctl_getdata(struct libcfs_ioctl_hdr **hdr_pp,
 
 	if (hdr.ioc_version != LIBCFS_IOCTL_VERSION &&
 	    hdr.ioc_version != LIBCFS_IOCTL_VERSION2) {
-		CERROR("libcfs ioctl: version mismatch expected %#x, got %#x\n",
-		       LIBCFS_IOCTL_VERSION, hdr.ioc_version);
+		trace_cerror_ioctl_invalid_version(LIBCFS_IOCTL_VERSION,
+						   hdr.ioc_version);
 		RETURN(-EINVAL);
 	}
 
 	if (hdr.ioc_len < sizeof(struct libcfs_ioctl_hdr)) {
-		CERROR("libcfs ioctl: user buffer too small for ioctl\n");
+		trace_cerror_ioctl_buffer_to_small();
 		RETURN(-EINVAL);
 	}
 
 	if (hdr.ioc_len > LIBCFS_IOC_DATA_MAX) {
-		CERROR("libcfs ioctl: user buffer is too large %d/%d\n",
-		       hdr.ioc_len, LIBCFS_IOC_DATA_MAX);
+		trace_cerror_ioctl_buffer_to_big(hdr.ioc_len,
+						 LIBCFS_IOC_DATA_MAX);
 		RETURN(-EINVAL);
 	}
 
@@ -154,8 +155,7 @@ libcfs_psdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	if (_IOC_TYPE(cmd) != IOC_LIBCFS_TYPE ||
 	    _IOC_NR(cmd) < IOC_LIBCFS_MIN_NR ||
 	    _IOC_NR(cmd) > IOC_LIBCFS_MAX_NR) {
-		CDEBUG(D_IOCTL, "invalid ioctl ( type %d, nr %d, size %d )\n",
-		       _IOC_TYPE(cmd), _IOC_NR(cmd), _IOC_SIZE(cmd));
+		trace_ioctl_failed(cmd);
 		return -EINVAL;
 	}
 

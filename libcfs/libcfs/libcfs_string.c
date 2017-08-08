@@ -37,6 +37,7 @@
  */
 
 #include <libcfs/libcfs.h>
+#include "libcfs_trace.h"
 
 char *cfs_strrstr(const char *haystack, const char *needle)
 {
@@ -123,8 +124,7 @@ int cfs_str2mask(const char *str, const char *(*bit2str)(int bit),
                         found = 1;
                 }
                 if (!found) {
-                        CWARN("unknown mask '%.*s'.\n"
-                              "mask usage: [+|-]<all|type> ...\n", len, str);
+			trace_cwarn_invalid_mask(len, str);
                         return -EINVAL;
                 }
                 str += len;
@@ -458,8 +458,7 @@ cfs_expr_list_values(struct cfs_expr_list *expr_list, int max, __u32 **valpp)
 		return 0;
 
 	if (count > max) {
-		CERROR("Number of values %d exceeds max allowed %d\n",
-		       max, count);
+		trace_cerror_list_excess(max, count);
 		return -EINVAL;
 	}
 

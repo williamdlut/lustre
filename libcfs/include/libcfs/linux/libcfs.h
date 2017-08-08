@@ -139,6 +139,18 @@ int lprocfs_call_handler(void *data, int write, loff_t *ppos,
 #define WITH_WATCHDOG
 #endif
 
+#ifndef HAVE_RATELIMIT_STATE_INIT
+static inline void ratelimit_state_init(struct ratelimit_state *rs,
+					int interval, int burst)
+{
+	rs->interval = interval;
+	rs->burst = burst;
+	rs->printed = 0;
+	rs->missed = 0;
+	rs->begin = 0;
+}
+#endif /* ! HAVE_RATELIMIT_STATE_INIT */
+
 /*
  * Macros to access common characteristics of "current" UNIX process.
  */

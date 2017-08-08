@@ -36,7 +36,7 @@
  */
 
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 #define LUSTRE_TRACEFILE_PRIVATE
 #include "tracefile.h"
 
@@ -270,11 +270,8 @@ int libcfs_debug_vmsg2(struct libcfs_debug_msg_data *msgdata,
         int                        i;
         int                        remain;
         int                        mask = msgdata->msg_mask;
-        char                      *file = (char *)msgdata->msg_file;
+	const char *file = kbasename(msgdata->msg_file);
 	struct cfs_debug_limit_state *cdls = msgdata->msg_cdls;
-
-        if (strchr(file, '/'))
-                file = strrchr(file, '/') + 1;
 
         tcd = cfs_trace_get_tcd();
 
@@ -382,7 +379,8 @@ int libcfs_debug_vmsg2(struct libcfs_debug_msg_data *msgdata,
 	__LASSERT(tage->used <= PAGE_SIZE);
 
 console:
-        if ((mask & libcfs_printk) == 0) {
+	if ((mask & libcfs_printk) == 0 ||
+	    (msgdata->msg_subsys & S_LIBCFS)) {
                 /* no console output requested */
                 if (tcd != NULL)
                         cfs_trace_put_tcd(tcd);

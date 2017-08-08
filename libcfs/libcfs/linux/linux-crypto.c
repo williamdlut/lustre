@@ -32,6 +32,7 @@
 #include <libcfs/libcfs.h>
 #include <libcfs/libcfs_crypto.h>
 #include <libcfs/linux/linux-crypto.h>
+#include "../libcfs_trace.h"
 
 #ifndef HAVE_CRYPTO_HASH_HELPERS
 static inline const char *crypto_ahash_alg_name(struct crypto_ahash *tfm)
@@ -79,14 +80,12 @@ static int cfs_crypto_hash_alloc(enum cfs_crypto_hash_alg hash_alg,
 	*type = cfs_crypto_hash_type(hash_alg);
 
 	if (*type == NULL) {
-		CWARN("Unsupported hash algorithm id = %d, max id is %d\n",
-		      hash_alg, CFS_HASH_ALG_MAX);
+		trace_cwarn_invalid_hash_algo(hash_alg);
 		return -EINVAL;
 	}
 	tfm = crypto_alloc_ahash((*type)->cht_name, 0, CRYPTO_ALG_ASYNC);
 	if (IS_ERR(tfm)) {
-		CDEBUG(D_INFO, "Failed to alloc crypto hash %s\n",
-		       (*type)->cht_name);
+		trace_info_crypto_ahash_alloc_fail((*type)->cht_name);
 		return PTR_ERR(tfm);
 	}
 
@@ -94,7 +93,7 @@ static int cfs_crypto_hash_alloc(enum cfs_crypto_hash_alg hash_alg,
 	if (!*req) {
 		CDEBUG(D_INFO, "Failed to alloc ahash_request for %s\n",
 		       (*type)->cht_name);
-		crypto_free_ahash(tfm);
+		trace_info_crypto_request_alloc_fail((*type)->cht_name);
 		return -ENOMEM;
 	}
 
@@ -113,9 +112,9 @@ static int cfs_crypto_hash_alloc(enum cfs_crypto_hash_alg hash_alg,
 		return err;
 	}
 
-	CDEBUG(D_INFO, "Using crypto hash: %s (%s) speed %d MB/s\n",
-	       crypto_ahash_alg_name(tfm), crypto_ahash_driver_name(tfm),
-	       cfs_crypto_hash_speeds[hash_alg]);
+	trace_info_crypto_setup(crypto_ahash_alg_name(tfm),
+				crypto_ahash_driver_name(tfm),
+				cfs_crypto_hash_speeds[hash_alg]);
 
 	err = crypto_ahash_init(*req);
 	if (err) {
@@ -365,17 +364,17 @@ static void cfs_crypto_performance_test(enum cfs_crypto_hash_alg hash_alg)
 out_err:
 	if (err != 0) {
 		cfs_crypto_hash_speeds[hash_alg] = err;
-		CDEBUG(D_INFO, "Crypto hash algorithm %s test error: rc = %d\n",
-		       cfs_crypto_hash_name(hash_alg), err);
+		trace_info_crypto_test_fail(cfs_crypto_hash_name(hash_alg),
+					    err);
 	} else {
 		unsigned long   tmp;
 
 		tmp = ((bcount * buf_len / jiffies_to_msecs(end - start)) *
 		       1000) / (1024 * 1024);
 		cfs_crypto_hash_speeds[hash_alg] = (int)tmp;
-		CDEBUG(D_CONFIG, "Crypto hash algorithm %s speed = %d MB/s\n",
-		       cfs_crypto_hash_name(hash_alg),
-		       cfs_crypto_hash_speeds[hash_alg]);
+
+		trace_config(cfs_crypto_hash_name(hash_alg),
+			     cfs_crypto_hash_speeds[hash_alg]);
 	}
 }
 

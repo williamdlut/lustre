@@ -34,10 +34,11 @@
  * Author: Jacob Berkman <jacob@clusterfs.com>
  */
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <linux/kthread.h>
 #include <libcfs/libcfs.h>
+#include "libcfs_trace.h"
 #include "tracefile.h"
 
 struct lc_watchdog {
@@ -102,10 +103,12 @@ lcw_dump(struct lc_watchdog *lcw)
 {
         ENTRY;
         rcu_read_lock();
-       if (lcw->lcw_task == NULL) {
-		LCONSOLE_WARN("Process %d was not found in the task "
-                              "list; watchdog callback may be incomplete\n",
-                              (int)lcw->lcw_pid);
+	if (lcw->lcw_task == NULL) {
+		if (__ratelimit(&libcfs_trace_rs)) {
+			trace_cwarn_watchdog_lcw_dump((int)lcw->lcw_pid);
+			pr_warn("Process %d was not found in the task list; watchdog callback may be incomplete\n",
+				(int)lcw->lcw_pid);
+		}
         } else {
                 libcfs_debug_dumpstack(lcw->lcw_task);
         }
@@ -172,11 +175,16 @@ static void lcw_dump_stack(struct lc_watchdog *lcw)
 	delta_time = current_time - lcw_last_watchdog_time;
 	if (delta_time < libcfs_watchdog_ratelimit &&
 	    lcw_recent_watchdog_count > 3) {
-		LCONSOLE_WARN("Service thread pid %u was inactive for %lu.%.02lus. Watchdog stack traces are limited to 3 per %d seconds, skipping this one.\n",
-			      (int)lcw->lcw_pid,
-			      timediff.tv_sec,
-			      timediff.tv_nsec / (NSEC_PER_SEC / 100),
-			      libcfs_watchdog_ratelimit);
+		if (__ratelimit(&libcfs_trace_rs)) {
+			trace_cwarn_watchdog_overflow((int)lcw->lcw_pid,
+						      timediff,
+						      libcfs_watchdog_ratelimit);
+			pr_warn("Service thread pid %u was inactive for %lu.%.02lu secs. Watchdog stack traces are limited to 3 per %d seconds, skipping this one.\n",
+				(int)lcw->lcw_pid,
+				timediff.tv_sec,
+				timediff.tv_nsec / (NSEC_PER_SEC / 100),
+				libcfs_watchdog_ratelimit);
+		}
 	} else {
 		if (delta_time < libcfs_watchdog_ratelimit) {
 			lcw_recent_watchdog_count++;
@@ -186,10 +194,13 @@ static void lcw_dump_stack(struct lc_watchdog *lcw)
 			lcw_recent_watchdog_count = 0;
 		}
 
-		LCONSOLE_WARN("Service thread pid %u was inactive for %lu.%.02lus. The thread might be hung, or it might only be slow and will resume later. Dumping the stack trace for debugging purposes:\n",
-			      (int)lcw->lcw_pid,
-			      timediff.tv_sec,
-			      timediff.tv_nsec / (NSEC_PER_SEC / 100));
+		if (__ratelimit(&libcfs_trace_rs)) {
+			trace_cwarn_watchdog_hang((int)lcw->lcw_pid, timediff);
+			pr_warn("Service thread pid %u was inactive for %lu.%.02lu secs. The thread might be hung, or it might only be slow and will resume later. Dumping the stack trace for debugging purposes:\n",
+				(int)lcw->lcw_pid,
+				timediff.tv_sec,
+				timediff.tv_nsec / (NSEC_PER_SEC / 100));
+		}
 		lcw_dump(lcw);
 	}
 }
@@ -218,17 +229,14 @@ static int lcw_dispatch_main(void *data)
 
 		rc = wait_event_interruptible(lcw_event_waitq,
 					      is_watchdog_fired());
-                CDEBUG(D_INFO, "Watchdog got woken up...\n");
+		trace_info_watchdog_dispatch_main();
 		if (test_bit(LCW_FLAG_STOP, &lcw_flags)) {
-			CDEBUG(D_INFO, "LCW_FLAG_STOP set, shutting down...\n");
+			trace_info_watchdog_flagged_stop();
 
 			spin_lock_bh(&lcw_pending_timers_lock);
 			rc = !list_empty(&lcw_pending_timers);
 			spin_unlock_bh(&lcw_pending_timers_lock);
-			if (rc) {
-				CERROR("pending timers list was not empty at "
-				       "time of watchdog dispatch shutdown\n");
-			}
+			trace_cerror_watchdog_thread_shutdown(rc);
 			break;
 		}
 
@@ -263,8 +271,7 @@ static int lcw_dispatch_main(void *data)
 			spin_unlock_bh(&lcw_pending_timers_lock);
 			spin_unlock_bh(&lcw->lcw_lock);
 
-			CDEBUG(D_INFO, "found lcw for pid %d\n",
-                               lcw->lcw_pid);
+			trace_info_watchdog_pid(lcw->lcw_pid);
                         lcw_dump_stack(lcw);
 
                         is_dumplog = lcw->lcw_callback == lc_watchdog_dumplog;
@@ -306,16 +313,15 @@ static void lcw_dispatch_start(void)
 	init_completion(&lcw_start_completion);
 	init_waitqueue_head(&lcw_event_waitq);
 
-	CDEBUG(D_INFO, "starting dispatch thread\n");
+	trace_info_watchdog_dispatch_starting();
 	task = kthread_run(lcw_dispatch_main, NULL, "lc_watchdogd");
 	if (IS_ERR(task)) {
-		CERROR("error spawning watchdog dispatch thread: %ld\n",
-			PTR_ERR(task));
+		trace_cerror_watchdog_thread_startup(PTR_ERR(task));
 		EXIT;
 		return;
 	}
 	wait_for_completion(&lcw_start_completion);
-	CDEBUG(D_INFO, "watchdog dispatcher initialization complete.\n");
+	trace_info_watchdog_dispatch_complete();
 
 	EXIT;
 }
@@ -325,14 +331,14 @@ static void lcw_dispatch_stop(void)
 	ENTRY;
 	LASSERT(lcw_refcount == 0);
 
-	CDEBUG(D_INFO, "trying to stop watchdog dispatcher.\n");
+	trace_info_watchdog_dispatch_stopping();
 
 	set_bit(LCW_FLAG_STOP, &lcw_flags);
 	wake_up(&lcw_event_waitq);
 
 	wait_for_completion(&lcw_stop_completion);
 
-	CDEBUG(D_INFO, "watchdog dispatcher has shut down.\n");
+	trace_info_watchdog_dispatch_stopped();
 
 	EXIT;
 }
@@ -346,7 +352,7 @@ struct lc_watchdog *lc_watchdog_add(int timeout,
 
         LIBCFS_ALLOC(lcw, sizeof(*lcw));
         if (lcw == NULL) {
-                CDEBUG(D_INFO, "Could not allocate new lc_watchdog\n");
+		trace_info_watchdog_alloc_failed();
                 RETURN(ERR_PTR(-ENOMEM));
         }
 
@@ -386,10 +392,14 @@ static void lcw_update_time(struct lc_watchdog *lcw, const char *message)
 		struct timespec64 timediff;
 
 		timediff = ktime_to_timespec64(lapse);
-		LCONSOLE_WARN("Service thread pid %u %s after %lu.%.02lus. This indicates the system was overloaded (too many service threads, or there were not enough hardware resources).\n",
-			      lcw->lcw_pid, message,
-			      timediff.tv_sec,
-			      timediff.tv_nsec / (NSEC_PER_SEC / 100));
+		if (__ratelimit(&libcfs_trace_rs)) {
+			trace_warn_watchdog_expired(lcw->lcw_pid, message,
+						    timediff);
+			pr_warn("Service thread pid %u %s after %lu.%.02lus. This indicates the system was overloaded (too many service threads, or there were not enough hardware resources).\n",
+				lcw->lcw_pid, message,
+				timediff.tv_sec,
+				timediff.tv_nsec / (NSEC_PER_SEC / 100));
+		}
 	}
 	lcw->lcw_last_touched = newtime;
 }

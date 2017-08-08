@@ -30,10 +30,11 @@
  * Lustre is a trademark of Sun Microsystems, Inc.
  */
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 #define LUSTRE_TRACEFILE_PRIVATE
 
 #include <libcfs/libcfs.h>
+#include "../libcfs_trace.h"
 #include "tracefile.h"
 
 /* percents to share the total debug memory for each type */
@@ -215,6 +216,7 @@ dbghdr_to_err_string(struct ptldebug_header *hdr)
 
                 case S_LND:
                 case S_LNET:
+		case S_LIBCFS:
                         return "LNetError";
                 default:
                         return "LustreError";
@@ -224,14 +226,14 @@ dbghdr_to_err_string(struct ptldebug_header *hdr)
 static char *
 dbghdr_to_info_string(struct ptldebug_header *hdr)
 {
-        switch (hdr->ph_subsys) {
-
-                case S_LND:
-                case S_LNET:
-                        return "LNet";
-                default:
-                        return "Lustre";
-        }
+	switch (hdr->ph_subsys) {
+	case S_LND:
+	case S_LNET:
+	case S_LIBCFS:
+		return "LNet";
+	default:
+		return "Lustre";
+	}
 }
 
 void cfs_print_to_console(struct ptldebug_header *hdr, int mask,

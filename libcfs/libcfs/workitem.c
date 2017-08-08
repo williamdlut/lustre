@@ -35,10 +35,11 @@
  *         Liang Zhen  <zhen.liang@sun.com>
  */
 
-#define DEBUG_SUBSYSTEM S_LNET
+#define DEBUG_SUBSYSTEM S_LIBCFS
 
 #include <linux/kthread.h>
 #include <libcfs/libcfs.h>
+#include "libcfs_trace.h"
 
 #define CFS_WS_NAME_LEN         16
 
@@ -206,14 +207,17 @@ static int
 cfs_wi_scheduler(void *arg)
 {
 	struct cfs_wi_sched *sched = (struct cfs_wi_sched *)arg;
+	int bound = 0;
 
 	cfs_block_allsigs();
 
 	/* CPT affinity scheduler? */
-	if (sched->ws_cptab != NULL)
-		if (cfs_cpt_bind(sched->ws_cptab, sched->ws_cpt) != 0)
-			CWARN("Unable to bind %s on CPU partition %d\n",
-				sched->ws_name, sched->ws_cpt);
+	if (sched->ws_cptab != NULL &&
+	    cfs_cpt_bind(sched->ws_cptab, sched->ws_cpt) != 0)
+		bound = 1;
+
+	trace_cwarn_bind_failure(sched->ws_name, sched->ws_cpt,
+				 bound);
 
 	spin_lock(&cfs_wi_data.wi_glock);
 
@@ -295,8 +299,7 @@ cfs_wi_sched_destroy(struct cfs_wi_sched *sched)
 
 	spin_lock(&cfs_wi_data.wi_glock);
 	if (sched->ws_stopping) {
-		CDEBUG(D_INFO, "%s is in progress of stopping\n",
-		       sched->ws_name);
+		trace_info_workitem_destroy(sched->ws_name);
 		spin_unlock(&cfs_wi_data.wi_glock);
 		return;
 	}
@@ -393,8 +396,7 @@ cfs_wi_sched_create(char *name, struct cfs_cpt_table *cptab,
 		if (IS_ERR(task)) {
 			int rc = PTR_ERR(task);
 
-			CERROR("Failed to create thread for "
-				"WI scheduler %s: %d\n", name, rc);
+			trace_cerror_wi_thread_start(name, rc);
 
 			spin_lock(&cfs_wi_data.wi_glock);
 

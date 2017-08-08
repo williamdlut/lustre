@@ -37,6 +37,7 @@
 
 #include <linux/random.h>
 #include <libcfs/libcfs.h>
+#include "libcfs_trace.h"
 
 /*
 From: George Marsaglia <geo@stat.fsu.edu>

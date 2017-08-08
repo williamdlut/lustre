@@ -478,6 +478,24 @@ $2
 }])
 
 #
+# LB_LINUX_CONFTEST_H
+#
+AC_DEFUN([LB_LINUX_CONFTEST_H], [
+cat - <<_ACEOF >conftest.h
+$1
+_ACEOF
+])
+
+#
+# LB_LINUX_CONFTEST_C
+#
+AC_DEFUN([LB_LINUX_CONFTEST_C], [
+cat confdefs.h - <<_ACEOF >conftest.c
+$1
+_ACEOF
+])
+
+#
 # LB_LINUX_COMPILE_IFELSE
 #
 # like AC_COMPILE_IFELSE
@@ -488,15 +506,16 @@ $2
 # $4 - do 'yes'
 # $5 - do 'no'
 #
-AC_DEFUN([LB_LINUX_COMPILE_IFELSE],
-[m4_ifvaln([$1], [AC_LANG_CONFTEST([AC_LANG_SOURCE([$1])])])dnl
+AC_DEFUN([LB_LINUX_COMPILE_IFELSE],[
+m4_ifvaln([$1], [LB_LINUX_CONFTEST_C([$1])])
+m4_ifvaln([$6], [LB_LINUX_CONFTEST_H([$6])], [LB_LINUX_CONFTEST_H([])])
 rm -f build/conftest.o build/conftest.mod.c build/conftest.ko
 SUBARCH=$(echo $target_cpu | sed -e 's/powerpc.*/powerpc/' -e 's/ppc.*/powerpc/' -e 's/x86_64/x86/' -e 's/i.86/x86/' -e 's/k1om/x86/' -e 's/aarch64.*/arm64/')
-AS_IF([AC_TRY_COMMAND(cp conftest.c build && make -d [$2] LDFLAGS= ${LD:+LD="$LD"} CC="$CC" -f $PWD/build/Makefile LUSTRE_LINUX_CONFIG=$LINUX_CONFIG LINUXINCLUDE="$EXTRA_CHECK_INCLUDE -I$LINUX/arch/$SUBARCH/include -Iinclude -Iarch/$SUBARCH/include/generated -I$LINUX/include -Iinclude2 -I$LINUX/include/uapi -Iinclude/generated -I$LINUX/arch/$SUBARCH/include/uapi -Iarch/$SUBARCH/include/generated/uapi -I$LINUX/include/uapi -Iinclude/generated/uapi ${SPL_OBJ:+-include $SPL_OBJ/spl_config.h} ${ZFS_OBJ:+-include $ZFS_OBJ/zfs_config.h} ${SPL:+-I$SPL -I$SPL/include } ${ZFS:+-I$ZFS -I$ZFS/include} -include $CONFIG_INCLUDE" -o tmp_include_depends -o scripts -o include/config/MARKER -C $LINUX_OBJ EXTRA_CFLAGS="-Werror-implicit-function-declaration $EXTRA_KCFLAGS" $MODULE_TARGET=$PWD/build) >/dev/null && AC_TRY_COMMAND([$3])],
+AS_IF([AC_TRY_COMMAND(cp conftest.c conftest.h build && make -d [$2] LDFLAGS= ${LD:+LD="$LD"} CC="$CC" -f $PWD/build/Makefile LUSTRE_LINUX_CONFIG=$LINUX_CONFIG LINUXINCLUDE="$EXTRA_CHECK_INCLUDE -I$LINUX/arch/$SUBARCH/include -Iinclude -Iarch/$SUBARCH/include/generated -I$LINUX/include -Iinclude2 -I$LINUX/include/uapi -Iinclude/generated -I$LINUX/arch/$SUBARCH/include/uapi -Iarch/$SUBARCH/include/generated/uapi -I$LINUX/include/uapi -Iinclude/generated/uapi ${SPL_OBJ:+-include $SPL_OBJ/spl_config.h} ${ZFS_OBJ:+-include $ZFS_OBJ/zfs_config.h} ${SPL:+-I$SPL -I$SPL/include } ${ZFS:+-I$ZFS -I$ZFS/include} -include $CONFIG_INCLUDE" -o tmp_include_depends -o scripts -o include/config/MARKER -C $LINUX_OBJ EXTRA_CFLAGS="-Werror-implicit-function-declaration $EXTRA_KCFLAGS" $MODULE_TARGET=$PWD/build) >/dev/null && AC_TRY_COMMAND([$3])],
 	[$4],
 	[_AC_MSG_LOG_CONFTEST
 m4_ifvaln([$5],[$5])dnl])
-rm -f build/conftest.o build/conftest.mod.c build/conftest.mod.o build/conftest.ko m4_ifval([$1], [build/conftest.c conftest.c])[]dnl
+rm -f build/conftest.o build/conftest.mod.c build/conftest.mod.o build/conftest.ko m4_ifval([$1], [build/conftest.c conftest.c build/conftest.h conftest.h])[]dnl
 ])
 
 #
@@ -509,6 +528,18 @@ LB_LINUX_COMPILE_IFELSE(
 	[AC_LANG_SOURCE([LB_LANG_PROGRAM([[$1]], [[$2]])])],
 	[modules], [test -s build/conftest.o],
 	[$3], [$4])
+])
+
+#
+# LB_LINUX_TRY_COMPILE_HEADER
+# like LB_LINUX_TRY_COMPILE, except the contents conftest.h are
+# provided via the fifth parameter
+#
+AC_DEFUN([LB_LINUX_TRY_COMPILE_HEADER], [
+LB_LINUX_COMPILE_IFELSE(
+	[AC_LANG_SOURCE([LB_LANG_PROGRAM([[$1]], [[$2]])])],
+	[modules], [test -s build/conftest.o],
+	[$3], [$4], [$5])
 ])
 
 #

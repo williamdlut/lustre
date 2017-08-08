@@ -107,6 +107,7 @@
 
 #include <libcfs/linux/linux-list.h>
 #include <libcfs/libcfs.h>
+#include "libcfs_trace.h"
 
 #if CFS_HASH_DEBUG_LEVEL >= CFS_HASH_DEBUG_1
 static unsigned int warn_on_depth = 8;
@@ -958,8 +959,12 @@ static int cfs_hash_dep_print(struct cfs_workitem *wi)
 	bits = hs->hs_dep_bits;
 	spin_unlock(&hs->hs_dep_lock);
 
-	LCONSOLE_WARN("#### HASH %s (bits: %d): max depth %d at bucket %d/%d\n",
-		      hs->hs_name, bits, dep, bkt, off);
+	if (__ratelimit(&libcfs_trace_rs)) {
+		trace_warn_hash_depth(hs->hs_name, bits, dep, bkt, off);
+		pr_warn("#### HASH %s (bits: %d): max depth %d at bucket %d/%d\n",
+			hs->hs_name, bits, dep, bkt, off);
+	}
+
 	spin_lock(&hs->hs_dep_lock);
 	hs->hs_dep_bits = 0; /* mark as workitem done */
 	spin_unlock(&hs->hs_dep_lock);
@@ -1692,7 +1697,7 @@ int
 cfs_hash_for_each_empty(struct cfs_hash *hs,
                         cfs_hash_for_each_cb_t func, void *data)
 {
-        unsigned  i = 0;
+	unsigned i = 0;
         ENTRY;
 
         if (cfs_hash_with_no_lock(hs))
@@ -1704,10 +1709,8 @@ cfs_hash_for_each_empty(struct cfs_hash *hs,
 		return -EOPNOTSUPP;
 
 	cfs_hash_for_each_enter(hs);
-	while (cfs_hash_for_each_relax(hs, func, data, 0)) {
-		CDEBUG(D_INFO, "Try to empty hash: %s, loop: %u\n",
-		       hs->hs_name, i++);
-	}
+	while (cfs_hash_for_each_relax(hs, func, data, 0))
+		trace_info_hash_flushing(hs->hs_name, i++);
 	cfs_hash_for_each_exit(hs);
 	RETURN(0);
 }
@@ -1980,7 +1983,7 @@ cfs_hash_rehash_worker(struct cfs_workitem *wi)
         if (bkts != NULL)
                 cfs_hash_buckets_free(bkts, bsize, new_size, old_size);
         if (rc != 0)
-		CDEBUG(D_INFO, "early quit of rehashing: %d\n", rc);
+		trace_info_hash_quit_rehashing(rc);
 	/* return 1 only if cfs_wi_exit is called */
 	return rc == -ESRCH;
 }
